@@ -1,15 +1,17 @@
-
 import { Bookmark, AppSettings, BookmarkCategory } from '@/types/bookmark';
 
 const BOOKMARKS_KEY = 'oriby_bookmarks';
 const SETTINGS_KEY = 'oriby_settings';
 const CATEGORIES_KEY = 'oriby_categories';
+const SERVER_BOOKMARKS_KEY = 'oriby_server_bookmarks';
 
 // Default settings
 const defaultSettings: AppSettings = {
   gridCols: 'grid-cols-4',
   showTitles: true,
   defaultCategory: 'default',
+  bookmarkSource: 'both',
+  serverBookmarksUrl: 'https://gist.githubusercontent.com/sultanarabi161/830336387acb4f39a49069d3ea577c13/raw/cce45b1ec0d349c44112f796d430b6069f72a86f/oribybookmarksv0.json'
 };
 
 // Default categories
@@ -21,23 +23,94 @@ const defaultCategories: BookmarkCategory[] = [
 
 export const StorageService = {
   // Bookmark methods
-  getBookmarks: (): Bookmark[] => {
+  getBookmarks: (source?: 'server' | 'manual' | 'both'): Bookmark[] => {
+    const bookmarkSource = source || StorageService.getSettings().bookmarkSource;
+    
+    if (bookmarkSource === 'server') {
+      return StorageService.getServerBookmarks();
+    } else if (bookmarkSource === 'manual') {
+      return StorageService.getManualBookmarks();
+    } else {
+      // Combine both sources
+      return [...StorageService.getManualBookmarks(), ...StorageService.getServerBookmarks()];
+    }
+  },
+
+  getManualBookmarks: (): Bookmark[] => {
     const bookmarksJson = localStorage.getItem(BOOKMARKS_KEY);
-    return bookmarksJson ? JSON.parse(bookmarksJson) : [];
+    const bookmarks = bookmarksJson ? JSON.parse(bookmarksJson) : [];
+    // Ensure all manual bookmarks have the source field
+    return bookmarks.map((bookmark: Bookmark) => ({
+      ...bookmark,
+      source: 'manual'
+    }));
+  },
+
+  getServerBookmarks: (): Bookmark[] => {
+    const bookmarksJson = localStorage.getItem(SERVER_BOOKMARKS_KEY);
+    const bookmarks = bookmarksJson ? JSON.parse(bookmarksJson) : [];
+    // Ensure all server bookmarks have the source field
+    return bookmarks.map((bookmark: Bookmark) => ({
+      ...bookmark,
+      source: 'server'
+    }));
   },
 
   saveBookmarks: (bookmarks: Bookmark[]): void => {
-    localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(bookmarks));
+    // Filter out only manual bookmarks to save
+    const manualBookmarks = bookmarks.filter(b => b.source !== 'server');
+    localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(manualBookmarks));
+  },
+
+  saveServerBookmarks: (bookmarks: Bookmark[]): void => {
+    localStorage.setItem(SERVER_BOOKMARKS_KEY, JSON.stringify(bookmarks));
+  },
+
+  fetchServerBookmarks: async (): Promise<Bookmark[]> => {
+    try {
+      const settings = StorageService.getSettings();
+      const response = await fetch(settings.serverBookmarksUrl);
+      if (!response.ok) {
+        throw new Error('Failed to fetch bookmarks');
+      }
+      const data = await response.json();
+      
+      // Process the fetched bookmarks
+      let bookmarks: Bookmark[] = [];
+      
+      if (Array.isArray(data)) {
+        bookmarks = data.map((bookmark: any) => ({
+          ...bookmark,
+          source: 'server',
+          // Ensure all required fields are present
+          id: bookmark.id || `server_${Date.now()}_${Math.random()}`,
+          createdAt: bookmark.createdAt || Date.now()
+        }));
+      }
+      
+      // Save to local storage
+      StorageService.saveServerBookmarks(bookmarks);
+      return bookmarks;
+    } catch (error) {
+      console.error('Error fetching server bookmarks:', error);
+      return [];
+    }
   },
 
   addBookmark: (bookmark: Bookmark): void => {
-    const bookmarks = StorageService.getBookmarks();
-    bookmarks.push(bookmark);
+    const bookmarks = StorageService.getManualBookmarks();
+    bookmarks.push({...bookmark, source: 'manual'});
     StorageService.saveBookmarks(bookmarks);
   },
 
   updateBookmark: (updatedBookmark: Bookmark): void => {
-    const bookmarks = StorageService.getBookmarks();
+    // Only allow updating manual bookmarks
+    if (updatedBookmark.source === 'server') {
+      console.warn('Cannot update server bookmarks');
+      return;
+    }
+    
+    const bookmarks = StorageService.getManualBookmarks();
     const index = bookmarks.findIndex(b => b.id === updatedBookmark.id);
     if (index !== -1) {
       bookmarks[index] = updatedBookmark;
@@ -46,7 +119,16 @@ export const StorageService = {
   },
 
   deleteBookmark: (id: string): void => {
-    const bookmarks = StorageService.getBookmarks();
+    // Check if it's a server bookmark
+    const serverBookmarks = StorageService.getServerBookmarks();
+    const isServerBookmark = serverBookmarks.some(b => b.id === id);
+    
+    if (isServerBookmark) {
+      console.warn('Cannot delete server bookmarks');
+      return;
+    }
+    
+    const bookmarks = StorageService.getManualBookmarks();
     const filteredBookmarks = bookmarks.filter(b => b.id !== id);
     StorageService.saveBookmarks(filteredBookmarks);
   },
@@ -95,7 +177,7 @@ export const StorageService = {
   // Import/Export
   exportData: (): string => {
     const data = {
-      bookmarks: StorageService.getBookmarks(),
+      bookmarks: StorageService.getManualBookmarks(),
       settings: StorageService.getSettings(),
       categories: StorageService.getCategories(),
     };

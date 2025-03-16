@@ -1,6 +1,6 @@
 
 import { useState, useEffect } from "react";
-import { Grid3x3, Grid2x2, Search, RefreshCw } from "lucide-react";
+import { Grid3x3, Grid2x2, Search, RefreshCw, Server, User } from "lucide-react";
 import Header from "@/components/Header";
 import BookmarkCard from "@/components/BookmarkCard";
 import AddBookmarkForm from "@/components/AddBookmarkForm";
@@ -9,6 +9,7 @@ import { StorageService } from "@/utils/storageService";
 import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Select,
   SelectContent,
@@ -24,7 +25,9 @@ const Index = () => {
   const [settings, setSettings] = useState<AppSettings>(StorageService.getSettings());
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [sourceFilter, setSourceFilter] = useState<string>(settings.bookmarkSource || "both");
   const [editBookmark, setEditBookmark] = useState<Bookmark | undefined>(undefined);
+  const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
   // Load bookmarks from storage
@@ -35,17 +38,50 @@ const Index = () => {
   // Filter bookmarks when search term or category changes
   useEffect(() => {
     filterBookmarks();
-  }, [bookmarks, searchTerm, categoryFilter]);
+  }, [bookmarks, searchTerm, categoryFilter, sourceFilter]);
 
-  const loadBookmarks = () => {
-    const loadedBookmarks = StorageService.getBookmarks();
-    setBookmarks(loadedBookmarks);
-    setCategories(StorageService.getCategories());
-    setSettings(StorageService.getSettings());
+  const loadBookmarks = async () => {
+    setIsLoading(true);
+    try {
+      // Load settings first to get the latest source preference
+      const currentSettings = StorageService.getSettings();
+      setSettings(currentSettings);
+      
+      // Fetch server bookmarks if needed
+      if (currentSettings.bookmarkSource === 'server' || currentSettings.bookmarkSource === 'both') {
+        await StorageService.fetchServerBookmarks();
+      }
+      
+      // Get all bookmarks based on source preference
+      const loadedBookmarks = StorageService.getBookmarks();
+      setBookmarks(loadedBookmarks);
+      setCategories(StorageService.getCategories());
+      
+      toast({
+        title: "Bookmarks loaded",
+        description: `Loaded ${loadedBookmarks.length} bookmarks successfully`,
+      });
+    } catch (error) {
+      console.error("Error loading bookmarks:", error);
+      toast({
+        title: "Error loading bookmarks",
+        description: "There was a problem loading your bookmarks",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const filterBookmarks = () => {
     let filtered = [...bookmarks];
+    
+    // Filter by source
+    if (sourceFilter === 'manual') {
+      filtered = filtered.filter(bookmark => bookmark.source === 'manual');
+    } else if (sourceFilter === 'server') {
+      filtered = filtered.filter(bookmark => bookmark.source === 'server');
+    }
     
     // Filter by search term
     if (searchTerm) {
@@ -70,7 +106,7 @@ const Index = () => {
     
     if (isEdit) {
       const updatedBookmarks = bookmarks.map((bm) =>
-        bm.id === bookmark.id ? bookmark : bm
+        bm.id === bookmark.id ? {...bookmark, source: 'manual'} : bm
       );
       setBookmarks(updatedBookmarks);
       StorageService.saveBookmarks(updatedBookmarks);
@@ -79,7 +115,8 @@ const Index = () => {
         description: `${bookmark.title} has been updated.`,
       });
     } else {
-      const newBookmarks = [...bookmarks, bookmark];
+      const newBookmark = {...bookmark, source: 'manual'};
+      const newBookmarks = [...bookmarks, newBookmark];
       setBookmarks(newBookmarks);
       StorageService.saveBookmarks(newBookmarks);
       toast({
@@ -92,13 +129,51 @@ const Index = () => {
   };
 
   const handleDeleteBookmark = (id: string) => {
+    // Find the bookmark to check if it's from server
+    const bookmarkToDelete = bookmarks.find(bm => bm.id === id);
+    
+    if (bookmarkToDelete?.source === 'server') {
+      toast({
+        title: "Cannot delete server bookmark",
+        description: "Server bookmarks are read-only",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     const updatedBookmarks = bookmarks.filter((bm) => bm.id !== id);
     setBookmarks(updatedBookmarks);
     StorageService.saveBookmarks(updatedBookmarks);
+    
+    toast({
+      title: "Bookmark deleted",
+      description: "The bookmark has been removed.",
+    });
   };
 
   const handleEditBookmark = (bookmark: Bookmark) => {
+    if (bookmark.source === 'server') {
+      toast({
+        title: "Cannot edit server bookmark",
+        description: "Server bookmarks are read-only",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setEditBookmark(bookmark);
+  };
+
+  const handleChangeSource = (value: string) => {
+    setSourceFilter(value as 'server' | 'manual' | 'both');
+    
+    // Update settings
+    const newSettings = { ...settings, bookmarkSource: value as 'server' | 'manual' | 'both' };
+    setSettings(newSettings);
+    StorageService.saveSettings(newSettings);
+    
+    // Reload bookmarks
+    loadBookmarks();
   };
 
   const toggleGridSize = () => {
@@ -132,7 +207,7 @@ const Index = () => {
             />
           </div>
           
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="All Categories" />
@@ -147,12 +222,30 @@ const Index = () => {
               </SelectContent>
             </Select>
             
+            <ToggleGroup type="single" value={sourceFilter} onValueChange={handleChangeSource}>
+              <ToggleGroupItem value="both" aria-label="All Bookmarks">
+                All
+              </ToggleGroupItem>
+              <ToggleGroupItem value="server" aria-label="Server Bookmarks">
+                <Server size={16} className="mr-1" /> Server
+              </ToggleGroupItem>
+              <ToggleGroupItem value="manual" aria-label="Manual Bookmarks">
+                <User size={16} className="mr-1" /> Manual
+              </ToggleGroupItem>
+            </ToggleGroup>
+            
             <Button variant="outline" size="icon" onClick={toggleGridSize}>
               {settings.gridCols === 'grid-cols-4' ? <Grid3x3 size={18} /> : <Grid2x2 size={18} />}
             </Button>
             
-            <Button variant="outline" size="icon" onClick={loadBookmarks} title="Refresh">
-              <RefreshCw size={18} />
+            <Button 
+              variant="outline" 
+              size="icon" 
+              onClick={loadBookmarks} 
+              title="Refresh"
+              disabled={isLoading}
+            >
+              <RefreshCw size={18} className={isLoading ? "animate-spin" : ""} />
             </Button>
           </div>
         </div>
@@ -179,16 +272,22 @@ const Index = () => {
                 className="w-20 h-20 mx-auto opacity-30"
               />
               <h3 className="mt-4 text-lg font-medium text-gray-600">
-                {searchTerm || categoryFilter !== "all" 
-                  ? "No bookmarks found matching your search" 
+                {searchTerm || categoryFilter !== "all" || sourceFilter !== "both"
+                  ? "No bookmarks found matching your criteria" 
                   : "No bookmarks yet"}
               </h3>
               <p className="text-gray-500 mt-1">
-                {searchTerm || categoryFilter !== "all" 
-                  ? "Try a different search term or category" 
+                {searchTerm || categoryFilter !== "all" || sourceFilter !== "both"
+                  ? "Try a different search term, category or source" 
                   : "Add your first bookmark using the + button"}
               </p>
             </div>
+            {isLoading && (
+              <div className="flex items-center gap-2 text-gray-500">
+                <RefreshCw size={18} className="animate-spin" />
+                Loading bookmarks...
+              </div>
+            )}
           </div>
         )}
       </main>

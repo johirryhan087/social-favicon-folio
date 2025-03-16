@@ -1,7 +1,6 @@
-
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Plus, Edit2, Trash2 } from "lucide-react";
+import { ArrowLeft, Plus, Edit2, Trash2, Server, User } from "lucide-react";
 import Header from "@/components/Header";
 import ImportExport from "@/components/ImportExport";
 import { Button } from "@/components/ui/button";
@@ -34,6 +33,9 @@ import { Input } from "@/components/ui/input";
 import { AppSettings, BookmarkCategory } from "@/types/bookmark";
 import { StorageService } from "@/utils/storageService";
 import { useToast } from "@/components/ui/use-toast";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { useForm } from "react-hook-form";
 
 const Settings = () => {
   const [settings, setSettings] = useState<AppSettings>(StorageService.getSettings());
@@ -42,7 +44,15 @@ const Settings = () => {
   const [editingCategory, setEditingCategory] = useState<BookmarkCategory | null>(null);
   const [categoryName, setCategoryName] = useState("");
   const [categoryColor, setCategoryColor] = useState("#9b87f5");
+  const [showServerUrlDialog, setShowServerUrlDialog] = useState(false);
+  const [serverUrl, setServerUrl] = useState(settings.serverBookmarksUrl || "");
   const { toast } = useToast();
+
+  const form = useForm({
+    defaultValues: {
+      bookmarkSource: settings.bookmarkSource,
+    },
+  });
 
   useEffect(() => {
     loadCategories();
@@ -59,6 +69,38 @@ const Settings = () => {
     toast({
       title: "Settings updated",
       description: "Your changes have been saved",
+    });
+  };
+
+  const handleSourceChange = (value: string) => {
+    updateSettings({ bookmarkSource: value as 'server' | 'manual' | 'both' });
+  };
+
+  const handleSaveServerUrl = () => {
+    if (!serverUrl) {
+      toast({
+        title: "Error",
+        description: "Server URL is required",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    updateSettings({ serverBookmarksUrl: serverUrl });
+    setShowServerUrlDialog(false);
+    
+    // Reload server bookmarks
+    StorageService.fetchServerBookmarks().then(() => {
+      toast({
+        title: "Server bookmarks updated",
+        description: "Server bookmarks have been refreshed",
+      });
+    }).catch(error => {
+      toast({
+        title: "Error",
+        description: "Failed to load server bookmarks",
+        variant: "destructive",
+      });
     });
   };
 
@@ -221,6 +263,61 @@ const Settings = () => {
             </CardContent>
           </Card>
           
+          {/* Bookmark Source Settings */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Bookmark Source</CardTitle>
+              <CardDescription>
+                Choose where to load bookmarks from
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <RadioGroup
+                value={settings.bookmarkSource}
+                onValueChange={handleSourceChange}
+                className="space-y-3"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="both" id="both" />
+                  <Label htmlFor="both" className="cursor-pointer">
+                    All bookmarks (Server + Manual)
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="server" id="server" />
+                  <Label htmlFor="server" className="cursor-pointer flex items-center">
+                    <Server size={16} className="mr-2" /> Server bookmarks only
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="manual" id="manual" />
+                  <Label htmlFor="manual" className="cursor-pointer flex items-center">
+                    <User size={16} className="mr-2" /> Manually added bookmarks only
+                  </Label>
+                </div>
+              </RadioGroup>
+              
+              <div className="pt-2">
+                <div className="flex items-center justify-between">
+                  <Label className="font-medium">Server Bookmarks URL</Label>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => {
+                      setServerUrl(settings.serverBookmarksUrl);
+                      setShowServerUrlDialog(true);
+                    }}
+                  >
+                    Edit
+                  </Button>
+                </div>
+                <p className="text-sm text-gray-500 mt-1 truncate">
+                  {settings.serverBookmarksUrl}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+          
           {/* Categories Management */}
           <Card>
             <CardHeader>
@@ -335,6 +432,40 @@ const Settings = () => {
             </Button>
             <Button onClick={saveCategory}>
               {editingCategory ? "Save Changes" : "Add Category"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Server URL Dialog */}
+      <Dialog open={showServerUrlDialog} onOpenChange={setShowServerUrlDialog}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Server Bookmarks URL</DialogTitle>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="serverUrl">JSON URL</Label>
+              <Input
+                id="serverUrl"
+                value={serverUrl}
+                onChange={(e) => setServerUrl(e.target.value)}
+                placeholder="Enter JSON URL"
+              />
+              <p className="text-xs text-gray-500">
+                Enter the URL of a JSON file containing your bookmarks. The file must contain an array of bookmark objects.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setShowServerUrlDialog(false)}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSaveServerUrl}>
+              Save
             </Button>
           </DialogFooter>
         </DialogContent>

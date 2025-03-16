@@ -6,6 +6,7 @@ export interface Bookmark {
   favicon: string;
   category?: string;
   createdAt: number;
+  source?: 'server' | 'manual';
 }
 
 export interface BookmarkCategory {
@@ -18,4 +19,6 @@ export interface AppSettings {
   gridCols: 'grid-cols-2' | 'grid-cols-3' | 'grid-cols-4' | 'grid-cols-5' | 'grid-cols-6';
   showTitles: boolean;
   defaultCategory: string;
+  bookmarkSource: 'server' | 'manual' | 'both';
+  serverBookmarksUrl: string;
 }

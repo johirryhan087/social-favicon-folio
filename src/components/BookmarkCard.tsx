@@ -1,6 +1,6 @@
 
 import { useState } from "react";
-import { Edit2, Trash2, ExternalLink } from "lucide-react";
+import { Edit2, Trash2, ExternalLink, Server } from "lucide-react";
 import { 
   DropdownMenu,
   DropdownMenuContent,
@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Bookmark } from "@/types/bookmark";
 import { StorageService } from "@/utils/storageService";
 import { useToast } from "@/components/ui/use-toast";
+import { Badge } from "@/components/ui/badge";
 
 interface BookmarkCardProps {
   bookmark: Bookmark;
@@ -25,6 +26,15 @@ const BookmarkCard = ({ bookmark, onEdit, onDelete, showTitle }: BookmarkCardPro
   const [imageError, setImageError] = useState(false);
 
   const handleDelete = () => {
+    if (bookmark.source === 'server') {
+      toast({
+        title: "Cannot delete server bookmark",
+        description: "Server bookmarks are read-only",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     onDelete(bookmark.id);
     toast({
       title: "Bookmark deleted",
@@ -47,6 +57,12 @@ const BookmarkCard = ({ bookmark, onEdit, onDelete, showTitle }: BookmarkCardPro
 
   return (
     <div className="group relative bg-white rounded-lg shadow-sm hover:shadow-md transition-all duration-300 p-2 aspect-square flex flex-col justify-center items-center">
+      {bookmark.source === 'server' && (
+        <Badge variant="secondary" className="absolute top-1 left-1 z-10 flex items-center gap-1 text-xs">
+          <Server size={10} /> Server
+        </Badge>
+      )}
+      
       <a 
         href={bookmark.url} 
         target="_blank" 
@@ -93,21 +109,25 @@ const BookmarkCard = ({ bookmark, onEdit, onDelete, showTitle }: BookmarkCardPro
               <ExternalLink className="mr-2 h-4 w-4" />
               Open
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => onEdit(bookmark)}
-              className="cursor-pointer"
-            >
-              <Edit2 className="mr-2 h-4 w-4" />
-              Edit
-            </DropdownMenuItem>
+            {bookmark.source !== 'server' && (
+              <DropdownMenuItem
+                onClick={() => onEdit(bookmark)}
+                className="cursor-pointer"
+              >
+                <Edit2 className="mr-2 h-4 w-4" />
+                Edit
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={handleDelete}
-              className="text-red-600 cursor-pointer"
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete
-            </DropdownMenuItem>
+            {bookmark.source !== 'server' && (
+              <DropdownMenuItem
+                onClick={handleDelete}
+                className="text-red-600 cursor-pointer"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
