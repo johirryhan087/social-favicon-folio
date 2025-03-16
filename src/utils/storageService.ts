@@ -175,7 +175,7 @@ export const StorageService = {
   },
 
   // Import/Export
-  exportData: (): string => {
+  exportData(): string {
     const data = {
       bookmarks: StorageService.getManualBookmarks(),
       settings: StorageService.getSettings(),
@@ -184,7 +184,7 @@ export const StorageService = {
     return JSON.stringify(data);
   },
 
-  importData: (jsonData: string): boolean => {
+  importData(jsonData: string): boolean {
     try {
       const data = JSON.parse(jsonData);
       if (data.bookmarks) StorageService.saveBookmarks(data.bookmarks);
