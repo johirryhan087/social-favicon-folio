@@ -70,16 +70,47 @@ export const StorageService = {
   fetchServerBookmarks: async (): Promise<Bookmark[]> => {
     try {
       const settings = StorageService.getSettings();
+      
+      // Check if URL is valid
+      if (!settings.serverBookmarksUrl) {
+        console.error('Server bookmarks URL is not defined');
+        return [];
+      }
+      
+      console.log('Fetching bookmarks from URL:', settings.serverBookmarksUrl);
+      
       const response = await fetch(settings.serverBookmarksUrl);
       if (!response.ok) {
-        throw new Error('Failed to fetch bookmarks');
+        throw new Error(`Failed to fetch bookmarks: ${response.status} ${response.statusText}`);
       }
-      const data = await response.json();
+      
+      const text = await response.text();
+      console.log('Response text preview:', text.substring(0, 100));
+      
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (error) {
+        console.error('Error parsing JSON:', error);
+        console.log('Raw response:', text);
+        throw new Error('Invalid JSON response');
+      }
       
       // Process the fetched bookmarks
       let bookmarks: Bookmark[] = [];
       
-      if (Array.isArray(data)) {
+      // Handle the format provided by the user where data is in a bookmarks property
+      if (data.bookmarks && Array.isArray(data.bookmarks)) {
+        bookmarks = data.bookmarks.map((bookmark: any) => ({
+          ...bookmark,
+          source: 'server' as const,
+          // Ensure all required fields are present
+          id: bookmark.id || `server_${Date.now()}_${Math.random()}`,
+          createdAt: bookmark.createdAt || Date.now()
+        }));
+      } 
+      // Handle direct array format
+      else if (Array.isArray(data)) {
         bookmarks = data.map((bookmark: any) => ({
           ...bookmark,
           source: 'server' as const,
@@ -88,6 +119,8 @@ export const StorageService = {
           createdAt: bookmark.createdAt || Date.now()
         }));
       }
+      
+      console.log(`Loaded ${bookmarks.length} server bookmarks`);
       
       // Save to local storage
       StorageService.saveServerBookmarks(bookmarks);
@@ -197,4 +230,40 @@ export const StorageService = {
       return false;
     }
   },
+  
+  // Direct import of the JSON structure provided by the user
+  importServerBookmarksData(jsonData: string): boolean {
+    try {
+      const data = JSON.parse(jsonData);
+      
+      // Import bookmarks
+      if (data.bookmarks && Array.isArray(data.bookmarks)) {
+        const serverBookmarks = data.bookmarks.map((bookmark: any) => ({
+          ...bookmark,
+          source: 'server' as const
+        }));
+        StorageService.saveServerBookmarks(serverBookmarks);
+      }
+      
+      // Optionally import categories if they don't exist
+      if (data.categories && Array.isArray(data.categories)) {
+        const existingCategories = StorageService.getCategories();
+        const existingCategoryIds = existingCategories.map(c => c.id);
+        
+        // Add only new categories
+        const newCategories = data.categories.filter(
+          (c: BookmarkCategory) => !existingCategoryIds.includes(c.id)
+        );
+        
+        if (newCategories.length > 0) {
+          StorageService.saveCategories([...existingCategories, ...newCategories]);
+        }
+      }
+      
+      return true;
+    } catch (e) {
+      console.error('Failed to import server data:', e);
+      return false;
+    }
+  }
 };
