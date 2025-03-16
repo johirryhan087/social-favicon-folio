@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Grid3x3, Grid2x2, Search, RefreshCw, Server, User } from "lucide-react";
 import Header from "@/components/Header";
@@ -25,7 +24,7 @@ const Index = () => {
   const [settings, setSettings] = useState<AppSettings>(StorageService.getSettings());
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
-  const [sourceFilter, setSourceFilter] = useState<string>(settings.bookmarkSource || "both");
+  const [sourceFilter, setSourceFilter] = useState<'server' | 'manual' | 'both'>(settings.bookmarkSource || "both");
   const [editBookmark, setEditBookmark] = useState<Bookmark | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
@@ -106,7 +105,7 @@ const Index = () => {
     
     if (isEdit) {
       const updatedBookmarks = bookmarks.map((bm) =>
-        bm.id === bookmark.id ? {...bookmark, source: 'manual'} : bm
+        bm.id === bookmark.id ? {...bookmark, source: 'manual' as const} : bm
       );
       setBookmarks(updatedBookmarks);
       StorageService.saveBookmarks(updatedBookmarks);
@@ -115,7 +114,7 @@ const Index = () => {
         description: `${bookmark.title} has been updated.`,
       });
     } else {
-      const newBookmark = {...bookmark, source: 'manual'};
+      const newBookmark = {...bookmark, source: 'manual' as const};
       const newBookmarks = [...bookmarks, newBookmark];
       setBookmarks(newBookmarks);
       StorageService.saveBookmarks(newBookmarks);
@@ -165,10 +164,13 @@ const Index = () => {
   };
 
   const handleChangeSource = (value: string) => {
-    setSourceFilter(value as 'server' | 'manual' | 'both');
+    if (!value) return; // Guard against empty value
+    
+    const typedValue = value as 'server' | 'manual' | 'both';
+    setSourceFilter(typedValue);
     
     // Update settings
-    const newSettings = { ...settings, bookmarkSource: value as 'server' | 'manual' | 'both' };
+    const newSettings = { ...settings, bookmarkSource: typedValue };
     setSettings(newSettings);
     StorageService.saveSettings(newSettings);
     

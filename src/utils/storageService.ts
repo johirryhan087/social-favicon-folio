@@ -1,3 +1,4 @@
+
 import { Bookmark, AppSettings, BookmarkCategory } from '@/types/bookmark';
 
 const BOOKMARKS_KEY = 'oriby_bookmarks';
@@ -11,7 +12,7 @@ const defaultSettings: AppSettings = {
   showTitles: true,
   defaultCategory: 'default',
   bookmarkSource: 'both',
-  serverBookmarksUrl: 'https://gist.githubusercontent.com/sultanarabi161/830336387acb4f39a49069d3ea577c13/raw/cce45b1ec0d349c44112f796d430b6069f72a86f/oribybookmarksv0.json'
+  serverBookmarksUrl: 'https://raw.githubusercontent.com/cracker2161/files/refs/heads/main/json/oriby_bookmarks_v0.json'
 };
 
 // Default categories
@@ -42,7 +43,7 @@ export const StorageService = {
     // Ensure all manual bookmarks have the source field
     return bookmarks.map((bookmark: Bookmark) => ({
       ...bookmark,
-      source: 'manual'
+      source: 'manual' as const
     }));
   },
 
@@ -52,7 +53,7 @@ export const StorageService = {
     // Ensure all server bookmarks have the source field
     return bookmarks.map((bookmark: Bookmark) => ({
       ...bookmark,
-      source: 'server'
+      source: 'server' as const
     }));
   },
 
@@ -81,7 +82,7 @@ export const StorageService = {
       if (Array.isArray(data)) {
         bookmarks = data.map((bookmark: any) => ({
           ...bookmark,
-          source: 'server',
+          source: 'server' as const,
           // Ensure all required fields are present
           id: bookmark.id || `server_${Date.now()}_${Math.random()}`,
           createdAt: bookmark.createdAt || Date.now()
@@ -99,7 +100,7 @@ export const StorageService = {
 
   addBookmark: (bookmark: Bookmark): void => {
     const bookmarks = StorageService.getManualBookmarks();
-    bookmarks.push({...bookmark, source: 'manual'});
+    bookmarks.push({...bookmark, source: 'manual' as const});
     StorageService.saveBookmarks(bookmarks);
   },
 
